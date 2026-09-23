@@ -1,251 +1,253 @@
-"""Generate the carpenter's plan-view sketch for the 38" x 17" drawer organizer.
+"""Generate carpenter's plan-view sketches for the drawer organizers.
 
-All dimensions are inches. Dividers are T = 1/4" (6 mm). The layout is defined
-once below; the script asserts every column/row adds up to the drawer size,
-then writes drawer-organizer.svg.
+Usage: python3 build.py            -> writes drawer-<size>.svg for every layout
+
+All dimensions are inches. Dividers are T = 1/4" (6 mm). Each layout is pure
+data: groups (left -> right) of rows (back -> front) of cells. Dividers, the
+dimension chains, the compartment schedule and the cut list are all derived
+from it, and the script asserts the layout tiles the drawer exactly.
 """
+import json
+from collections import Counter
 from fractions import Fraction as F
 
-W, D, T = F(38), F(17), F(1, 4)
-HEIGHT = '2½" (65 mm)'
+T = F(1, 4)
+HEIGHT_TXT = '2 1/2" (65 mm)'
 
-# Columns left -> right: (key, clear width, [(label, clear depth), ...] back -> front)
-COLS = [
-    ("A", F(15, 2), [("PERFUME", F(11)), ("GROOMING", F(23, 4))]),
-    ("B", F(37, 4), None),   # belts: 2 x 3 grid, built below
-    ("C", F(19, 2), None),   # watches + wallets, built below
-    ("D", F(7), [("SUNGLASSES", F(7, 2))] * 3),
-    ("E", F(15, 4), [("RINGS", F(7, 2)), ("CUFFLINKS", F(7, 2)), ("CHAIN / BRACELET", F(7, 2))]),
-]
-DROP_DEPTH = F(23, 4)  # daily drop tray spans columns D + E at the front
+# group = (name, width, rows); row = (depth, [(label, width), ...]); width None = whole group
+LAYOUTS = {
+    "38x17": dict(W=F(38), D=F(17), flex=("Perfume bay (width)", "Daily drop tray (depth)"), groups=[
+        ("Perfume", F(15, 2), [(F(11), [("PERFUME", None)]), (F(23, 4), [("GROOMING", None)])]),
+        ("Belts", F(37, 4), [(F(11, 2), [("BELT", F(9, 2))] * 2)] * 3),
+        ("Watch / wallet", F(19, 2), [(F(4), [("WATCH", F(3))] * 3)] * 2
+         + [(F(17, 2), [("WALLET", F(37, 8))] * 2)]),
+        ("Sunglasses + small items", F(11), [
+            (F(7, 2), [("SUNGLASSES", F(7)), ("RINGS", F(15, 4))]),
+            (F(7, 2), [("SUNGLASSES", F(7)), ("CUFFLINKS", F(15, 4))]),
+            (F(7, 2), [("SUNGLASSES", F(7)), ("CHAIN / BRACELET", F(15, 4))]),
+            (F(23, 4), [("DAILY DROP TRAY", None)]),
+        ]),
+    ]),
+    "31x17": dict(W=F(31), D=F(17), flex=("Perfume bay (width)", "Pens / keys cell (depth)"), groups=[
+        ("Perfume", F(15, 2), [(F(17), [("PERFUME", None)])]),
+        ("Belts / ties", F(37, 4), [(F(11, 2), [("BELT / TIE", F(9, 2))] * 2)] * 3),
+        ("Watch / wallet", F(19, 2), [(F(4), [("WATCH", F(3))] * 3)] * 2
+         + [(F(17, 2), [("WALLET / CARDS", F(37, 8))] * 2)]),
+        ("Small items", F(4), [
+            (F(7, 2), [("RINGS", None)]),
+            (F(7, 2), [("CUFFLINKS", None)]),
+            (F(7, 2), [("TIE PIN / CLIPS", None)]),
+            (F(23, 4), [("PENS / KEYS", None)]),
+        ]),
+    ]),
+}
+
+HOLDS = {
+    "PERFUME": "Perfume bottles, standing", "GROOMING": "Deo, trimmer, comb",
+    "BELT": "1 rolled belt each", "BELT / TIE": "1 rolled belt or tie each",
+    "WATCH": "1 watch on a pillow each", "WALLET": "2–3 wallets / card cases on edge",
+    "WALLET / CARDS": "2–3 wallets / card cases on edge", "SUNGLASSES": "1 pair / case each",
+    "RINGS": "Rings", "CUFFLINKS": "Cufflinks", "CHAIN / BRACELET": "Chain, bracelet",
+    "TIE PIN / CLIPS": "Tie pins, collar stays", "PENS / KEYS": "Pens, spare keys",
+    "DAILY DROP TRAY": "Keys, phone, earbuds, pen",
+}
+PAL = {
+    "PERFUME": "#e9d5c3", "GROOMING": "#efe3d6", "BELT": "#d9e4d2", "BELT / TIE": "#d9e4d2",
+    "WATCH": "#d4dfea", "WALLET": "#e8dcc0", "WALLET / CARDS": "#e8dcc0", "SUNGLASSES": "#e6d3dc",
+    "DAILY DROP TRAY": "#dcdcdc", "PENS / KEYS": "#dcdcdc",
+}
+SMALL_COLOUR = "#f1e6c9"
 
 
 def fmt(x):
-    """Inches as carpenter fraction, e.g. 4 5/8"."""
-    x = F(x)
+    """Inches as a carpenter's fraction, e.g. 4 5/8"."""
     whole, rem = divmod(x.numerator, x.denominator)
-    frac = F(rem, x.denominator)
-    if frac == 0:
+    if rem == 0:
         return f'{whole}"'
+    frac = F(rem, x.denominator)
     return f'{whole} {frac.numerator}/{frac.denominator}"' if whole else f'{frac.numerator}/{frac.denominator}"'
 
 
-def mm(x):
-    return f"{round(float(x) * 25.4)} mm"
-
-
-# ---- build cell list: (x, y, w, d, label, colour) --------------------------
-cells, dividers = [], []  # dividers: (x, y, w, d)
-PAL = {
-    "PERFUME": "#e9d5c3", "GROOMING": "#efe3d6", "BELT": "#d9e4d2", "WATCH": "#d4dfea",
-    "WALLET": "#e8dcc0", "SUNGLASSES": "#e6d3dc", "RINGS": "#f1e6c9", "CUFFLINKS": "#f1e6c9",
-    "CHAIN / BRACELET": "#f1e6c9", "DAILY DROP TRAY": "#dcdcdc",
-}
-
-x = F(0)
-for i, (key, cw, rows) in enumerate(COLS):
-    if key == "B":  # belts 2 x 3
-        bw = (cw - T) / 2
-        bd = (D - 2 * T) / 3
-        assert bw == F(9, 2) and bd == F(11, 2)
-        dividers.append((x + bw, 0, T, D))
-        for r in range(3):
-            y = r * (bd + T)
-            if r:
-                dividers.append((x, y - T, cw, T))
-            for c in range(2):
-                cells.append((x + c * (bw + T), y, bw, bd, "BELT"))
-    elif key == "C":  # 2 rows x 3 watches, then 2 wallet bays
-        ww, wd = F(3), F(4)
-        assert 3 * ww + 2 * T == cw
-        for r in range(2):
-            y = r * (wd + T)
-            if r:
-                dividers.append((x, y - T, cw, T))
-            for c in range(3):
-                cells.append((x + c * (ww + T), y, ww, wd, "WATCH"))
-        for c in (1, 2):
-            dividers.append((x + c * ww + (c - 1) * T, 0, T, 2 * wd + T))
-        y0 = 2 * wd + 2 * T
-        dividers.append((x, y0 - T, cw, T))
-        lw = (cw - T) / 2
-        dividers.append((x + lw, y0, T, D - y0))
-        for c in range(2):
-            cells.append((x + c * (lw + T), y0, lw, D - y0, "WALLET"))
-    else:
+def solve(L):
+    """Place cells and divider pieces. Returns (cells, pieces); pieces = (x, y, w, d, use)."""
+    W, D, groups = L["W"], L["D"], L["groups"]
+    assert sum(g[1] for g in groups) + (len(groups) - 1) * T == W, "group widths != drawer width"
+    cells, pieces = [], []
+    gx = F(0)
+    for gi, (name, gw, rows) in enumerate(groups):
+        assert sum(r[0] for r in rows) + (len(rows) - 1) * T == D, f"{name}: row depths != drawer depth"
+        runs = {}  # x of an in-row divider -> [y0, y1]; aligned dividers merge through cross pieces
         y = F(0)
-        for j, (label, d) in enumerate(rows):
-            if j:
-                dividers.append((x, y - T, cw, T))
-            cells.append((x, y, cw, d, label))
-            y += d + T
-        if key in ("D", "E"):  # last divider before the shared drop tray
-            dividers.append((x, y - T, cw + (T if key == "D" else 0), T))
-            assert y + DROP_DEPTH == D, (key, y)
-        else:
-            assert y - T == D, (key, y)
-    x += cw
-    if i < len(COLS) - 1:
-        dividers.append((x, 0, T, D if key != "D" else D - DROP_DEPTH - T))
-        x += T
-assert x == W, x
-dx = sum(c[1] for c in COLS[:3]) + 3 * T  # left edge of column D
-cells.append((dx, D - DROP_DEPTH, W - dx, DROP_DEPTH, "DAILY DROP TRAY"))
+        for ri, (rd, row) in enumerate(rows):
+            if ri:
+                pieces.append((gx, y - T, gw, T, f"Cross piece – {name.lower()}"))
+            widths = [w if w is not None else gw for _, w in row]
+            assert sum(widths) + (len(row) - 1) * T == gw, f"{name} row {ri}: cell widths != group width"
+            cx = gx
+            for ci, ((label, _), w) in enumerate(zip(row, widths)):
+                if ci:
+                    dx = cx - T
+                    if dx in runs and runs[dx][1] == y - T:
+                        runs[dx][1] = y + rd
+                    else:
+                        if dx in runs:
+                            pieces.append((dx, runs[dx][0], T, runs[dx][1] - runs[dx][0], f"{name} cell dividers"))
+                        runs[dx] = [y, y + rd]
+                cells.append((cx, y, w, rd, label))
+                cx += w + T
+            y += rd + T
+        for dx, (y0, y1) in runs.items():
+            pieces.append((dx, y0, T, y1 - y0, f"{name} cell dividers"))
+        gx += gw
+        if gi < len(groups) - 1:
+            pieces.append((gx, F(0), T, D, "Main long dividers (full depth)"))
+            gx += T
 
-# overlap / coverage check: cells + dividers must tile the drawer exactly
-area = sum(c[2] * c[3] for c in cells) + sum(d[2] * d[3] for d in dividers)
-crossings = F(0)
-for i, a in enumerate(dividers):
-    for b in dividers[i + 1:]:
+    # cells + dividers must tile the drawer exactly. Crossing dividers share a T x T square
+    # (the halving joint); any other overlap is an error.
+    def overlap(a, b):
         ox = min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0])
         oy = min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1])
-        if ox > 0 and oy > 0:
-            crossings += ox * oy
-assert area - crossings == W * D, (area, crossings)
+        return ox * oy if ox > 0 and oy > 0 else 0
 
-# ---- SVG ------------------------------------------------------------------
-S = 34              # px per inch
-OX, OY = 110, 260   # drawing origin (back-left inner corner)
-PW, PH = 1520, 1500
-f = lambda v: float(v) * S
-out = []
-a = out.append
-a(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {PW} {PH}" width="{PW}" height="{PH}" '
-  'font-family="Helvetica, Arial, sans-serif">')
-a('<defs><marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
-  '<path d="M0,1 L9,5 L0,9 z" fill="#222"/></marker></defs>')
-a(f'<rect width="{PW}" height="{PH}" fill="#fff"/>')
-a('<text x="110" y="60" font-size="30" font-weight="700" fill="#111">DRAWER ORGANIZER — PARTITION LAYOUT (TOP VIEW)</text>')
-a(f'<text x="110" y="92" font-size="17" fill="#444">Inside drawer: 38" W × 17" D  ·  Dividers: 1/4" (6 mm) thick × {HEIGHT} high  ·  '
-  'All sizes are CLEAR inside sizes</text>')
-
-# drawer walls
-wt = 0.5
-a(f'<rect x="{OX - wt*S}" y="{OY - wt*S}" width="{f(W) + 2*wt*S}" height="{f(D) + 2*wt*S}" fill="#bdbdbd" stroke="#333" stroke-width="2"/>')
-a(f'<rect x="{OX}" y="{OY}" width="{f(W)}" height="{f(D)}" fill="#fafafa" stroke="#333" stroke-width="1.5"/>')
-
-for (cx, cy, cw, cd, label) in cells:
-    X, Y, Wp, Hp = OX + f(cx), OY + f(cy), f(cw), f(cd)
-    a(f'<rect x="{X}" y="{Y}" width="{Wp}" height="{Hp}" fill="{PAL[label]}"/>')
-    mx, my = X + Wp / 2, Y + Hp / 2
-    small = Wp < 110
-    fs = 11 if small else 14
-    name = label if not (small and "/" in label) else label.replace(" / ", "/")
-    lines = [name, f"{fmt(cw)} × {fmt(cd)}"]
-    if label == "CHAIN / BRACELET":
-        lines = ["CHAIN /", "BRACELET", lines[1]]
-    if label in ("RINGS", "CUFFLINKS", "CHAIN / BRACELET", "WATCH"):
-        fs = 11
-    y0 = my - (len(lines) - 1) * fs * 0.62
-    for k, line in enumerate(lines):
-        weight = 700 if k < len(lines) - 1 else 400
-        a(f'<text x="{mx}" y="{y0 + k * fs * 1.25}" font-size="{fs}" font-weight="{weight}" text-anchor="middle" '
-          f'dominant-baseline="middle" fill="#222">{line}</text>')
-
-for (dx_, dy_, dw, dd) in dividers:
-    a(f'<rect x="{OX + f(dx_)}" y="{OY + f(dy_)}" width="{f(dw)}" height="{f(dd)}" fill="#5a4636"/>')
+    rects = [c[:4] for c in cells] + [p[:4] for p in pieces]
+    shared = F(0)
+    for i, a in enumerate(rects):
+        for j in range(i + 1, len(rects)):
+            o = overlap(a, rects[j])
+            assert not o or (i >= len(cells) and o == T * T), ("overlap", a, rects[j])
+            shared += o
+    assert sum(r[2] * r[3] for r in rects) - shared == W * D, "gaps in layout"
+    return cells, pieces
 
 
-def dim_h(x1, x2, y, text, fs=13):
-    a(f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#222" stroke-width="1" marker-start="url(#ar)" marker-end="url(#ar)"/>')
-    a(f'<text x="{(x1 + x2) / 2}" y="{y - 6}" font-size="{fs}" text-anchor="middle" fill="#111">{text}</text>')
+def render(size, L):
+    W, D, groups = L["W"], L["D"], L["groups"]
+    cells, pieces = solve(L)
+    S = F(1290) / W                  # px per inch: the plan is always ~1290 px wide
+    f = lambda v: float(v * S)
+    OX, OY, PW = 110, 260, 1520
+    plan_bottom = OY + f(D)
+    TY = plan_bottom + 90
+    out = []
+    a = out.append
+
+    def text(x, y, s, size=14, weight=400, anchor="start", fill="#222", extra=""):
+        a(f'<text x="{x}" y="{y}" font-size="{size}" font-weight="{weight}" text-anchor="{anchor}" '
+          f'fill="{fill}" {extra}>{s}</text>')
+
+    def dim_h(x1, x2, y, s, fs=13):
+        a(f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="#222" marker-start="url(#ar)" marker-end="url(#ar)"/>')
+        text((x1 + x2) / 2, y - 6, s, fs, anchor="middle", fill="#111")
+
+    def dim_v(y1, y2, x, s, fs=13):
+        a(f'<line x1="{x}" y1="{y1}" x2="{x}" y2="{y2}" stroke="#222" marker-start="url(#ar)" marker-end="url(#ar)"/>')
+        cx, cy = x - 7, (y1 + y2) / 2
+        text(cx, cy, s, fs, anchor="middle", fill="#111", extra=f'transform="rotate(-90 {cx} {cy})"')
+
+    def ext(x1, y1, x2, y2):
+        a(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#888" stroke-width="0.7" stroke-dasharray="3 3"/>')
+
+    # schedule + cut list first, so the page height is known
+    sched = Counter((c[4], c[2], c[3]) for c in cells)
+    cut = Counter((p[2] if p[3] == T else p[3], p[4]) for p in pieces)
+    cut_rows = sorted(cut.items(), key=lambda kv: -kv[0][0])
+    run_ft = sum(k[0] * n for k, n in cut.items()) / 12
+    NY = TY + 130 + max(len(sched), len(cut_rows)) * 25
+    notes = [
+        f"1. MEASURE FIRST: confirm the drawer's clear inside size is {fmt(W)} × {fmt(D)}. If it differs, keep every cell size above and absorb the",
+        f"    difference in the {L['flex'][0]} and the {L['flex'][1]} — those are the only two flexible compartments.",
+        "2. Dividers: 6 mm plywood / MDF with white laminate or edge-banding to match the drawer (or 4–5 mm acrylic). Height 65 mm — keep ≥ 25 mm clear under the drawer above.",
+        "3. Joints: where two dividers cross, cut half-depth slots (egg-crate / halving joint) so the grid drops in as one removable unit. Cut each piece ~1 mm short for easy fit.",
+        "4. Lining: glue 2–3 mm velvet / suede sheet on the drawer base (like the sample photo) so watches, perfume and jewellery don't scratch or slide.",
+        '5. Watch cells: soft pillows, 3" long × 2" dia (foam rolled in the same fabric), lying front-to-back in each 3" × 4" cell.',
+        "6. Perfume: check tallest bottle vs. drawer inside height before finalising — tall bottles can lie on their side in the perfume bay.",
+    ]
+    PH = int(NY + 30 + len(notes) * 23 + 40)
+
+    a(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {PW} {PH}" width="{PW}" height="{PH}" '
+      'font-family="Helvetica, Arial, sans-serif">')
+    a('<defs><marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" '
+      'orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#222"/></marker></defs>')
+    a(f'<rect width="{PW}" height="{PH}" fill="#fff"/>')
+    text(110, 60, f"DRAWER ORGANIZER {fmt(W)} × {fmt(D)} — PARTITION LAYOUT (TOP VIEW)", 30, 700, fill="#111")
+    text(110, 92, f"Inside drawer: {fmt(W)} W × {fmt(D)} D  ·  Dividers: 1/4\" (6 mm) thick × {HEIGHT_TXT} high  ·  "
+         "All sizes are CLEAR inside sizes", 17, fill="#444")
+
+    # drawer, cells, dividers
+    wall = float(S) / 2
+    a(f'<rect x="{OX - wall}" y="{OY - wall}" width="{f(W) + 2 * wall}" height="{f(D) + 2 * wall}" '
+      'fill="#bdbdbd" stroke="#333" stroke-width="2"/>')
+    a(f'<rect x="{OX}" y="{OY}" width="{f(W)}" height="{f(D)}" fill="#fafafa" stroke="#333" stroke-width="1.5"/>')
+    for cx, cy, cw, cd, label in cells:
+        X, Y, Wp, Hp = OX + f(cx), OY + f(cy), f(cw), f(cd)
+        a(f'<rect x="{X}" y="{Y}" width="{Wp}" height="{Hp}" fill="{PAL.get(label, SMALL_COLOUR)}"/>')
+        fs = 14 if Wp >= 140 else 12 if Wp >= 110 else 11
+        name = label.split(" / ") if Wp < 150 and " / " in label else [label]
+        if len(name) == 2:
+            name[0] += " /"
+        lines = name + [f"{fmt(cw)} × {fmt(cd)}"]
+        y0 = Y + Hp / 2 - (len(lines) - 1) * fs * 0.62
+        for k, line in enumerate(lines):
+            text(X + Wp / 2, y0 + k * fs * 1.25, line, fs, 700 if k < len(lines) - 1 else 400,
+                 "middle", extra='dominant-baseline="middle"')
+    for px, py, pw, pd, _ in pieces:
+        a(f'<rect x="{OX + f(px)}" y="{OY + f(py)}" width="{f(pw)}" height="{f(pd)}" fill="#5a4636"/>')
+
+    # dimension chains: top = back-row cells, sides = rows of first / last group
+    top1, top2 = OY - 45, OY - 85
+    for cx, cy, cw, cd, _ in cells:
+        if cy == 0:
+            ext(OX + f(cx), OY - 20, OX + f(cx), top1 - 8)
+            ext(OX + f(cx + cw), OY - 20, OX + f(cx + cw), top1 - 8)
+            dim_h(OX + f(cx), OX + f(cx + cw), top1, fmt(cw))
+    dim_h(OX, OX + f(W), top2, f"OVERALL INSIDE WIDTH {fmt(W)} ({round(W * F(254, 10))} mm)", 15)
+    for gi, xpos in ((0, OX - 40), (-1, OX + f(W) + 40)):
+        y = F(0)
+        for rd, _ in groups[gi][2]:
+            dim_v(OY + f(y), OY + f(y + rd), xpos, fmt(rd))
+            y += rd + T
+    dim_v(OY, plan_bottom, OX + f(W) + 85, f"OVERALL INSIDE DEPTH {fmt(D)} ({round(D * F(254, 10))} mm)", 15)
+    text(OX + f(W) / 2, OY - 108, "▲ BACK OF DRAWER", 14, anchor="middle", fill="#666", extra='letter-spacing="3"')
+    text(OX + f(W) / 2, plan_bottom + 45, "▼ FRONT OF DRAWER (HANDLE SIDE — YOU STAND HERE)", 14,
+         anchor="middle", fill="#666", extra='letter-spacing="3"')
+
+    # compartment schedule
+    text(110, TY, f"COMPARTMENT SCHEDULE ({len(cells)} compartments)", 20, 700, fill="#111")
+    for cx, h in zip([110, 390, 450, 610], ["Compartment", "Qty", "Clear size (W × D)", "Holds"]):
+        text(cx, TY + 34, h, 14, 700, fill="#333")
+    a(f'<line x1="110" y1="{TY + 42}" x2="860" y2="{TY + 42}" stroke="#333"/>')
+    for r, ((label, w, d), n) in enumerate(sched.items()):
+        for cx, v in zip([110, 390, 450, 610], [label.title(), n, f"{fmt(w)} × {fmt(d)}", HOLDS[label]]):
+            text(cx, TY + 64 + r * 25, v)
+
+    # cut list
+    CX = 920
+    text(CX, TY, f"CUT LIST — {sum(cut.values())} pieces", 20, 700, fill="#111")
+    for cx, h in zip([CX, CX + 90, CX + 140], ["Length", "Qty", "Use"]):
+        text(cx, TY + 34, h, 14, 700, fill="#333")
+    a(f'<line x1="{CX}" y1="{TY + 42}" x2="{PW - 60}" y2="{TY + 42}" stroke="#333"/>')
+    for r, ((ln, use), n) in enumerate(cut_rows):
+        for cx, v in zip([CX, CX + 90, CX + 140], [fmt(ln), n, use]):
+            text(cx, TY + 64 + r * 25, v)
+    text(CX, TY + 68 + len(cut_rows) * 25, f"All strips 1/4\" (6 mm) thick × {HEIGHT_TXT} high · "
+         f"total ≈ {round(run_ft)} ft running length", 13, fill="#555")
+
+    text(110, NY, "NOTES FOR CARPENTER", 20, 700, fill="#111")
+    for k, n in enumerate(notes):
+        text(110, NY + 30 + k * 23, n, extra='xml:space="preserve"')
+    a("</svg>")
+
+    with open(f"drawer-{size}.svg", "w") as fh:
+        fh.write("\n".join(out))
+    print(f"drawer-{size}: {len(cells)} compartments, {sum(cut.values())} pieces, "
+          f"{float(run_ft):.1f} ft, page {PW}x{PH} — tiling verified")
+    for (ln, use), n in cut_rows:
+        print(f"   {fmt(ln):>8} x{n}  {use}")
+    return PH
 
 
-def dim_v(y1, y2, x, text, fs=13):
-    a(f'<line x1="{x}" y1="{y1}" x2="{x}" y2="{y2}" stroke="#222" stroke-width="1" marker-start="url(#ar)" marker-end="url(#ar)"/>')
-    cx, cy = x - 7, (y1 + y2) / 2
-    a(f'<text x="{cx}" y="{cy}" font-size="{fs}" text-anchor="middle" fill="#111" transform="rotate(-90 {cx} {cy})">{text}</text>')
-
-
-def ext(x1, y1, x2, y2):
-    a(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#888" stroke-width="0.7" stroke-dasharray="3 3"/>')
-
-
-# top: column chain + overall
-top1, top2 = OY - 45, OY - 85
-x = F(0)
-for i, (key, cw, _) in enumerate(COLS):
-    ext(OX + f(x), OY - 20, OX + f(x), top1 - 8)
-    ext(OX + f(x + cw), OY - 20, OX + f(x + cw), top1 - 8)
-    dim_h(OX + f(x), OX + f(x + cw), top1, fmt(cw))
-    x += cw + T
-dim_h(OX, OX + f(W), top2, 'OVERALL INSIDE WIDTH 38" (965 mm)', 15)
-
-# left: column A rows; right: column D/E rows; overall depth far right
-lx = OX - 40
-dim_v(OY, OY + f(11), lx, fmt(11))
-dim_v(OY + f(11 + T), OY + f(D), lx, fmt(F(23, 4)))
-rx = OX + f(W) + 40
-y = F(0)
-for d in (F(7, 2), F(7, 2), F(7, 2), DROP_DEPTH):
-    dim_v(OY + f(y), OY + f(y + d), rx, fmt(d))
-    y += d + T
-dim_v(OY, OY + f(D), rx + 45, 'OVERALL INSIDE DEPTH 17" (432 mm)', 15)
-
-# back / front labels
-a(f'<text x="{OX + f(W)/2}" y="{OY - 108}" font-size="14" text-anchor="middle" fill="#666" letter-spacing="3">▲ BACK OF DRAWER</text>')
-a(f'<text x="{OX + f(W)/2}" y="{OY + f(D) + 45}" font-size="14" text-anchor="middle" fill="#666" letter-spacing="3">▼ FRONT OF DRAWER (HANDLE SIDE — YOU STAND HERE)</text>')
-
-# ---- tables ----------------------------------------------------------------
-TY = OY + f(D) + 90
-a(f'<text x="110" y="{TY}" font-size="20" font-weight="700" fill="#111">COMPARTMENT SCHEDULE (23 compartments)</text>')
-sched = [
-    ("Perfume bay", 1, '7 1/2" × 11"', "6–8 bottles standing"),
-    ("Grooming", 1, '7 1/2" × 5 3/4"', "Deo, trimmer, comb"),
-    ("Belts", 6, '4 1/2" × 5 1/2"', "1 rolled belt each"),
-    ("Watches", 6, '3" × 4"', "1 watch on a pillow each"),
-    ("Wallets", 2, '4 5/8" × 8 1/2"', "2–3 wallets / card cases on edge"),
-    ("Sunglasses", 3, '7" × 3 1/2"', "1 pair / case each"),
-    ("Rings · Cufflinks · Chain", 3, '3 3/4" × 3 1/2"', "Small jewellery"),
-    ("Daily drop tray", 1, '11" × 5 3/4"', "Keys, phone, earbuds, pen"),
-]
-cols_x = [110, 390, 450, 610]
-hdr = ["Compartment", "Qty", "Clear size (W × D)", "Holds"]
-for cx, h in zip(cols_x, hdr):
-    a(f'<text x="{cx}" y="{TY + 34}" font-size="14" font-weight="700" fill="#333">{h}</text>')
-a(f'<line x1="110" y1="{TY + 42}" x2="860" y2="{TY + 42}" stroke="#333"/>')
-for r, row in enumerate(sched):
-    yy = TY + 64 + r * 25
-    for cx, v in zip(cols_x, row):
-        a(f'<text x="{cx}" y="{yy}" font-size="14" fill="#222">{v}</text>')
-
-# cut list
-CX = 920
-cut = [
-    ('17"', 4, "Main long dividers (full depth)"),
-    ('11"', 1, "Sunglasses | small-items divider"),
-    ('11"', 3, "Cross pieces, sunglasses + small items"),
-    ('9 1/2"', 2, "Cross pieces, watch / wallet area"),
-    ('9 1/4"', 2, "Cross pieces, belts"),
-    ('8 1/2"', 1, "Wallet bay centre divider"),
-    ('8 1/4"', 2, "Watch cell dividers"),
-    ('7 1/2"', 1, "Perfume / grooming cross piece"),
-]
-a(f'<text x="{CX}" y="{TY}" font-size="20" font-weight="700" fill="#111">CUT LIST — 16 pieces</text>')
-for cx, h in zip([CX, CX + 90, CX + 140], ["Length", "Qty", "Use"]):
-    a(f'<text x="{cx}" y="{TY + 34}" font-size="14" font-weight="700" fill="#333">{h}</text>')
-a(f'<line x1="{CX}" y1="{TY + 42}" x2="{PW - 60}" y2="{TY + 42}" stroke="#333"/>')
-for r, (ln, q, use) in enumerate(cut):
-    yy = TY + 64 + r * 25
-    for cx, v in zip([CX, CX + 90, CX + 140], [ln, str(q), use]):
-        a(f'<text x="{cx}" y="{yy}" font-size="14" fill="#222">{v}</text>')
-a(f'<text x="{CX}" y="{TY + 64 + 8 * 25 + 4}" font-size="13" fill="#555">All strips 1/4" (6 mm) thick × 2 1/2" (65 mm) high · total ≈ 15 ft running length</text>')
-
-# notes
-NY = TY + 330
-notes = [
-    "1. MEASURE FIRST: confirm the drawer's clear inside size is 38\" × 17\". If it differs, keep every cell size above and absorb the difference in the",
-    "    Perfume bay (width) and the Daily drop tray (depth) — those are the only two flexible compartments.",
-    "2. Dividers: 6 mm plywood / MDF with white laminate or edge-banding to match the drawer (or 4–5 mm acrylic). Height 65 mm — keep ≥ 25 mm clear under the drawer above.",
-    "3. Joints: where two dividers cross, cut half-depth slots (egg-crate / halving joint) so the grid drops in as one removable unit. Cut each piece ~1 mm short for easy fit.",
-    "4. Lining: glue 2–3 mm velvet / suede sheet on the drawer base (like the sample photo) so watches, perfume and sunglasses don't scratch or slide.",
-    "5. Watch cells: 6 soft pillows, 3\" long × 2\" dia (foam rolled in the same fabric), lying front-to-back in each 3\" × 4\" cell.",
-    "6. Perfume: check tallest bottle vs. drawer inside height before finalising — tall bottles can lie on their side in the 11\" deep bay.",
-]
-a(f'<text x="110" y="{NY}" font-size="20" font-weight="700" fill="#111">NOTES FOR CARPENTER</text>')
-for k, n in enumerate(notes):
-    a(f'<text x="110" y="{NY + 30 + k * 23}" font-size="14" fill="#222" xml:space="preserve">{n}</text>')
-a('</svg>')
-
-open("drawer-organizer.svg", "w").write("\n".join(out))
-print(f"ok: {len(cells)} compartments, {len(dividers)} divider segments, tiling verified")
+if __name__ == "__main__":
+    heights = {size: render(size, L) for size, L in LAYOUTS.items()}
+    with open("sizes.json", "w") as fh:
+        json.dump(heights, fh)

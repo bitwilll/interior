@@ -9,3 +9,9 @@
 ## Review
 - build.py asserts every column sums to 38" and every row to 17", and that cells + dividers tile the drawer with no gaps (caught a 1/4" gap at the sunglasses/drop-tray junction, fixed).
 - Rendered PNG inspected; fixed title/dimension label overlap by moving the plan down.
+
+# Drawer 2 (31" x 17")
+- [x] Refactor build.py: layouts as data (groups -> rows -> cells); auto-derive dividers, dimensions, schedule and cut list
+- [x] Regenerate 38x17 and confirm it matches the approved drawing (same cells, same cut list)
+- [x] Add 31x17 layout, verify tiling, render, inspect
+- [x] Commit + push
