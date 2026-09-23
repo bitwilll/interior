@@ -1,0 +1,197 @@
+<!doctype html>
+<!-- 3D preview of a drawer organizer. Open via a local web server:
+     render3d.html?size=51x20  (reads layout-<size>.json written by build.py) -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Drawer Organizer 3D</title>
+<style>html,body{margin:0;background:#ece7e1;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"}}</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+
+const size = new URLSearchParams(location.search).get('size') || '51x20';
+const L = await (await fetch(`layout-${size}.json`)).json();
+const { W, D, H } = L;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#ece7e1');
+
+// ---- materials --------------------------------------------------------------
+const mat = (color, rough = 0.6, metal = 0) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+const M = {
+  laminate: mat('#f4f2ee', 0.45), lining: mat('#b98579', 0.95), divider: mat('#f7f5f1', 0.4),
+  counter: mat('#d8d2c8', 0.5), black: mat('#262626', 0.5), gold: mat('#d4b06a', 0.35),
+  chrome: mat('#c7c9cc', 0.3), white: mat('#fbfbfb', 0.7), glass: new THREE.MeshPhysicalMaterial({
+    color: '#f3e6d6', roughness: 0.05, transmission: 0.6, thickness: 0.5, transparent: true, opacity: 0.85 }),
+};
+const add = (geo, m, x, y, z, rot = [0, 0, 0], parent = scene) => {
+  const o = new THREE.Mesh(geo, m);
+  o.position.set(x, y, z); o.rotation.set(...rot);
+  o.castShadow = o.receiveShadow = true;
+  parent.add(o); return o;
+};
+const box = (w, h, d, m, x, y, z, rot) => add(new THREE.BoxGeometry(w, h, d), m, x, y, z, rot);
+const cyl = (r, h, m, x, y, z, rot, r2 = r) => add(new THREE.CylinderGeometry(r, r2, h, 32), m, x, y, z, rot);
+const HALF = Math.PI / 2;
+
+// ---- drawer: base lining, walls, front panel ----------------------------------
+const wall = 0.75, sideH = 5;
+box(W + 2 * wall, 0.5, D + 2 * wall, M.laminate, W / 2, -0.25, D / 2);
+box(W, 0.08, D, M.lining, W / 2, 0.04, D / 2);
+box(wall, sideH, D + 2 * wall, M.laminate, -wall / 2, sideH / 2, D / 2);
+box(wall, sideH, D + 2 * wall, M.laminate, W + wall / 2, sideH / 2, D / 2);
+box(W, sideH, wall, M.laminate, W / 2, sideH / 2, -wall / 2);
+box(W + 2 * wall, sideH + 0.5, wall, M.laminate, W / 2, sideH / 2 - 0.25, D + wall / 2);  // drawer front
+box(8, 0.9, 1, M.black, W / 2, sideH - 1.6, D + wall + 0.5);                          // handle
+const floor = box(200, 0.1, 200, mat('#e6dfd6', 0.9), W / 2, -3, D / 2);                 // shadow catcher
+
+// ---- dividers -------------------------------------------------------------------
+for (const [x, z, w, d] of L.pieces) box(w, H, d, M.divider, x + w / 2, H / 2, z + d / 2);
+
+// ---- props ----------------------------------------------------------------------
+const palette = ['#b3263a', '#d45d79', '#8e3b46', '#e38b6f', '#a0522d', '#c2185b', '#6d2e46', '#f06292', '#9c6b98'];
+const pick = (i) => mat(palette[i % palette.length], 0.35);
+const grid = (cx, cz, w, d, nx, nz, fn) => {
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++)
+    fn(cx - w / 2 + (i + 0.5) * w / nx, cz - d / 2 + (j + 0.5) * d / nz, i * nz + j);
+};
+
+const PROPS = {
+  'HAIR DRYER'(cx, cz) {
+    const g = new THREE.Group(); scene.add(g); g.position.set(cx - 0.5, 1.6, cz - 0.6);
+    const pink = mat('#e8b4b8', 0.35);
+    add(new THREE.CylinderGeometry(1.6, 1.6, 5.5, 40), pink, 0, 0, -1.2, [0, 0, HALF], g);
+    add(new THREE.CylinderGeometry(1.1, 1.4, 2.5, 40), pink, 3.9, 0, -1.2, [0, 0, HALF], g);
+    add(new THREE.CylinderGeometry(1.62, 1.62, 0.4, 40), M.gold, -2.9, 0, -1.2, [0, 0, HALF], g);
+    add(new THREE.BoxGeometry(1.3, 1.3, 5), pink, -0.6, -0.3, 2.0, [0, 0, 0], g);
+    add(new THREE.TorusGeometry(1.4, 0.16, 12, 40), M.black, 3.8, -1.45, 2.8, [HALF, 0, 0], g);
+    add(new THREE.TorusGeometry(1.1, 0.16, 12, 40), M.black, 3.8, -1.25, 2.8, [HALF, 0, 0.3], g);
+  },
+  'STRAIGHTENER'(cx, cz) {
+    box(9, 0.55, 1.1, M.black, cx - 0.5, 0.4, cz - 0.7);
+    box(9, 0.55, 1.1, M.black, cx - 0.5, 0.4, cz + 0.55);
+    box(3.5, 0.2, 0.9, M.chrome, cx + 2.2, 0.72, cz - 0.7);
+    add(new THREE.TorusGeometry(0.9, 0.14, 12, 30), M.black, cx + 4.6, 0.25, cz, [HALF, 0, 0]);
+  },
+  'CURLER / ROUND BRUSH'(cx, cz) {
+    cyl(0.6, 6, M.chrome, cx + 1.5, 0.7, cz - 0.9, [0, 0, HALF]);
+    cyl(0.7, 4, M.black, cx - 3.5, 0.75, cz - 0.9, [0, 0, HALF]);
+    cyl(0.9, 4.5, mat('#8d6e63', 0.8), cx + 0.5, 0.95, cz + 1.2, [0, 0, HALF]);
+    cyl(0.35, 4, mat('#5d4037', 0.5), cx - 3.7, 0.95, cz + 1.2, [0, 0, HALF]);
+  },
+  'HAIRBRUSH'(cx, cz) {
+    box(3, 0.6, 4, mat('#d7a9a0', 0.5), cx, 0.4, cz - 2);
+    box(1, 0.5, 4.5, mat('#d7a9a0', 0.5), cx, 0.35, cz + 2.2);
+    grid(cx, cz - 2, 2.6, 3.6, 6, 7, (x, z) => cyl(0.06, 0.5, M.black, x, 0.9, z));
+  },
+  'COMBS'(cx, cz) {
+    [-1.2, 0, 1.2].forEach((dx, i) => box(1.2, 0.2, 7.5, [M.black, mat('#8d6e63'), mat('#e0c9a6')][i], cx + dx, 0.2, cz));
+  },
+  'MAKEUP BRUSHES'(cx, cz) {
+    [-1.5, -0.75, 0, 0.75, 1.5].forEach((dx, i) => {
+      cyl(0.22, 4.5, i % 2 ? M.black : mat('#f3c6c6', 0.4), cx + dx, 0.3, cz + 1.3, [HALF, 0, 0]);
+      cyl(0.24, 1.2, M.gold, cx + dx, 0.3, cz - 1.5, [HALF, 0, 0]);
+      cyl(0.45, 1.5, mat('#3e2723', 0.9), cx + dx, 0.35, cz - 2.8, [HALF, 0, 0], 0.22);
+    });
+  },
+  'HAIR SPRAY / OIL'(cx, cz) {
+    cyl(1.1, 5.5, mat('#7b1fa2', 0.3), cx, 2.75, cz - 2.2); cyl(0.9, 1, M.white, cx, 6, cz - 2.2);
+    cyl(0.9, 4.2, M.glass, cx - 0.6, 2.1, cz + 2); cyl(0.3, 1, M.gold, cx - 0.6, 4.7, cz + 2);
+    cyl(0.6, 3.5, mat('#ffb300', 0.2), cx + 1.2, 1.75, cz + 1.8);
+  },
+  'SERUMS / TONER'(cx, cz) {
+    [[-2, -2.5, 5, '#ffffff'], [0, -2.5, 4, '#f8bbd0'], [2, -2.5, 4.6, '#b2dfdb'],
+     [-2, 1.5, 3.2, '#ffe0b2'], [0.3, 1.8, 3.6, '#e1bee7'], [2.2, 1.6, 2.8, '#fff3e0']].forEach(([dx, dz, h, c]) => {
+      cyl(0.8, h, mat(c, 0.25), cx + dx, h / 2, cz + dz);
+      cyl(0.35, 0.8, M.gold, cx + dx, h + 0.4, cz + dz);
+    });
+  },
+  'CREAMS / JARS'(cx, cz) {
+    [[-1.7, -2.4, '#fce4ec'], [1.7, -2.4, '#fffde7'], [-1.7, 1.5, '#e8eaf6'], [1.7, 1.5, '#fbe9e7']].forEach(([dx, dz, c]) => {
+      cyl(1.4, 1.8, mat(c, 0.2), cx + dx, 0.9, cz + dz);
+      cyl(1.45, 0.6, M.gold, cx + dx, 2.1, cz + dz);
+    });
+  },
+  'PALETTES / COMPACTS'(cx, cz) {
+    box(6.5, 0.4, 4, M.black, cx - 0.5, 0.25, cz - 2.2);
+    grid(cx - 0.5, cz - 2.2, 5.5, 3, 6, 2, (x, z, i) => box(0.7, 0.1, 1.2, pick(i + 3), x, 0.5, z));
+    box(5, 0.4, 3.5, mat('#f8bbd0', 0.3), cx - 1, 0.65, cz + 2.4);
+    cyl(1.3, 0.5, M.gold, cx + 2.8, 0.3, cz + 2.4); cyl(1.1, 0.5, M.black, cx + 2.6, 0.3, cz + 0.3);
+  },
+  'FOUNDATION'(cx, cz) {
+    [-2.8, 0, 2.8].forEach((dz, i) => {
+      box(1.6, 3.4, 1.2, M.glass, cx - 0.9, 1.7, cz + dz);
+      cyl(0.4, 1, M.black, cx - 0.9, 3.9, cz + dz);
+      cyl(0.5, 3, mat(['#d7a47f', '#c68b59', '#e0b793'][i], 0.4), cx + 1.3, 1.5, cz + dz);
+    });
+  },
+  'LIPSTICK'(cx, cz) {
+    grid(cx, cz, 3.8, 3.8, 3, 3, (x, z, i) => {
+      cyl(0.42, 2.2, M.gold, x, 1.1, z); cyl(0.3, 0.8, pick(i), x, 2.6, z);
+    });
+  },
+  'NAIL POLISH'(cx, cz, w) {
+    grid(cx, cz, 4.2, 3.8, 3, 3, (x, z, i) => {
+      box(0.95, 1.3, 0.95, pick(i + 2), x, 0.65, z); cyl(0.3, 1.2, M.black, x, 1.9, z);
+    });
+  },
+  'KAJAL / LINER'(cx, cz) {
+    [-1.3, -0.4, 0.5, 1.4].forEach((dx, i) => cyl(0.2, 4, i % 2 ? M.black : M.gold, cx + dx, 0.22, cz, [HALF, 0, 0]));
+  },
+  'MASCARA'(cx, cz) {
+    [-1.2, 0, 1.2].forEach((dx, i) => cyl(0.35, 4, i === 1 ? mat('#f06292', 0.3) : M.black, cx + dx, 0.37, cz, [HALF, 0, 0]));
+  },
+  'EARRINGS'(cx, cz) {
+    grid(cx, cz, 3.5, 3.5, 3, 3, (x, z, i) => add(new THREE.TorusGeometry(0.4, 0.07, 10, 24), i % 2 ? M.gold : M.chrome, x, 0.1, z, [HALF, 0, 0]));
+  },
+  'HAIR TIES / CLIPS'(cx, cz) {
+    grid(cx, cz, 3.4, 3.4, 3, 3, (x, z, i) => add(new THREE.TorusGeometry(0.55, 0.17, 10, 24), pick(i + 4), x, 0.18, z, [HALF, 0, 0]));
+  },
+  'BINDI / PINS'(cx, cz) {
+    [-1, 0.3, 1.6].forEach((dz, i) => box(3, 0.1, 1.1, pick(i), cx, 0.1 + i * 0.02, cz + dz - 0.3));
+    box(2, 0.6, 1.3, M.white, cx, 0.3, cz - 1.8);
+  },
+  'PERFUME / DEO'(cx, cz) {
+    box(2.2, 3.5, 1.3, M.glass, cx - 2.8, 1.75, cz); box(1.3, 0.9, 1.3, M.gold, cx - 2.8, 3.95, cz);
+    cyl(1, 3.2, M.glass, cx, 1.6, cz); cyl(0.6, 1, M.black, cx, 3.7, cz);
+    cyl(0.9, 6, mat('#37474f', 0.3), cx + 2.9, 3, cz);
+  },
+  'COTTON / BUDS'(cx, cz) {
+    cyl(1.3, 2.2, M.white, cx - 0.8, 1.1, cz - 0.6);
+    box(1.8, 1.4, 2.8, mat('#e3f2fd', 0.5), cx + 1.3, 0.7, cz + 0.6);
+  },
+};
+
+for (const [x, z, w, d, label] of L.cells) PROPS[label]?.(x + w / 2, z + d / 2, w, d);
+
+// ---- light + camera -----------------------------------------------------------------
+scene.add(new THREE.HemisphereLight('#ffffff', '#b8a99a', 1.1));
+const sun = new THREE.DirectionalLight('#fff6ec', 2.2);
+sun.position.set(W * 0.3, 60, D + 25);
+sun.target.position.set(W / 2, 0, D / 2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(4096, 4096);
+Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 35, bottom: -35, near: 1, far: 150 });
+sun.shadow.bias = -0.0004;
+scene.add(sun, sun.target);
+
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 1, 500);
+camera.position.set(W / 2, 67, D + 30);
+camera.lookAt(W / 2, 0, D / 2 + 0.5);
+renderer.render(scene, camera);
+document.title = 'rendered';
+</script>
+</body>
+</html>

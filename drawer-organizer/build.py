@@ -16,7 +16,11 @@ HEIGHT_TXT = '2 1/2" (65 mm)'
 
 # group = (name, width, rows); row = (depth, [(label, width), ...]); width None = whole group
 LAYOUTS = {
-    "38x17": dict(W=F(38), D=F(17), flex=("Perfume bay (width)", "Daily drop tray (depth)"), groups=[
+    "38x17": dict(W=F(38), D=F(17), flex=("Perfume bay (width)", "Daily drop tray (depth)"),
+                  extra=[
+                      '5. Watch cells: soft pillows, 3" long × 2" dia (foam rolled in the same fabric), lying front-to-back in each 3" × 4" cell.',
+                      "6. Perfume: check tallest bottle vs. drawer inside height before finalising — tall bottles can lie on their side in the perfume bay.",
+                  ], groups=[
         ("Perfume", F(15, 2), [(F(11), [("PERFUME", None)]), (F(23, 4), [("GROOMING", None)])]),
         ("Belts", F(37, 4), [(F(11, 2), [("BELT", F(9, 2))] * 2)] * 3),
         ("Watch / wallet", F(19, 2), [(F(4), [("WATCH", F(3))] * 3)] * 2
@@ -28,7 +32,11 @@ LAYOUTS = {
             (F(23, 4), [("DAILY DROP TRAY", None)]),
         ]),
     ]),
-    "31x17": dict(W=F(31), D=F(17), flex=("Perfume bay (width)", "Pens / keys cell (depth)"), groups=[
+    "31x17": dict(W=F(31), D=F(17), flex=("Perfume bay (width)", "Pens / keys cell (depth)"),
+                  extra=[
+                      '5. Watch cells: soft pillows, 3" long × 2" dia (foam rolled in the same fabric), lying front-to-back in each 3" × 4" cell.',
+                      "6. Perfume: check tallest bottle vs. drawer inside height before finalising — tall bottles can lie on their side in the perfume bay.",
+                  ], groups=[
         ("Perfume", F(15, 2), [(F(17), [("PERFUME", None)])]),
         ("Belts / ties", F(37, 4), [(F(11, 2), [("BELT / TIE", F(9, 2))] * 2)] * 3),
         ("Watch / wallet", F(19, 2), [(F(4), [("WATCH", F(3))] * 3)] * 2
@@ -38,6 +46,32 @@ LAYOUTS = {
             (F(7, 2), [("CUFFLINKS", None)]),
             (F(7, 2), [("TIE PIN / CLIPS", None)]),
             (F(23, 4), [("PENS / KEYS", None)]),
+        ]),
+    ]),
+    "51x20": dict(W=F(51), D=F(20), title="DRESSING CABINET DRAWER",
+                  flex=("Hair tools column (width)", "Perfume / cotton row (depth)"),
+                  extra=[
+                      "5. Hair tools bay: put a heat-proof silicone mat on the base; let the dryer / straightener cool before storing. Coil cords, don't wrap them tight.",
+                      "6. Tall items (hair spray, toner, perfume) stand upright only if the drawer's inside height allows — otherwise lay them in the same cell.",
+                  ], groups=[
+        ("Hair tools", F(49, 4), [
+            (F(10), [("HAIR DRYER", None)]),
+            (F(19, 4), [("STRAIGHTENER", None)]),
+            (F(19, 4), [("CURLER / ROUND BRUSH", None)]),
+        ]),
+        ("Brushes", F(37, 4), [
+            (F(79, 8), [("HAIRBRUSH", F(9, 2)), ("COMBS", F(9, 2))]),
+            (F(79, 8), [("MAKEUP BRUSHES", F(9, 2)), ("HAIR SPRAY / OIL", F(9, 2))]),
+        ]),
+        ("Skincare / makeup", F(57, 4), [
+            (F(79, 8), [("SERUMS / TONER", F(7)), ("CREAMS / JARS", F(7))]),
+            (F(79, 8), [("PALETTES / COMPACTS", F(9)), ("FOUNDATION", F(5))]),
+        ]),
+        ("Small items", F(29, 2), [
+            (F(19, 4), [("LIPSTICK", F(9, 2)), ("LIPSTICK", F(9, 2)), ("NAIL POLISH", F(5))]),
+            (F(19, 4), [("KAJAL / LINER", F(9, 2)), ("MASCARA", F(9, 2)), ("NAIL POLISH", F(5))]),
+            (F(19, 4), [("EARRINGS", F(9, 2)), ("HAIR TIES / CLIPS", F(9, 2)), ("BINDI / PINS", F(5))]),
+            (F(5), [("PERFUME / DEO", F(37, 4)), ("COTTON / BUDS", F(5))]),
         ]),
     ]),
 }
@@ -50,11 +84,25 @@ HOLDS = {
     "RINGS": "Rings", "CUFFLINKS": "Cufflinks", "CHAIN / BRACELET": "Chain, bracelet",
     "TIE PIN / CLIPS": "Tie pins, collar stays", "PENS / KEYS": "Pens, spare keys",
     "DAILY DROP TRAY": "Keys, phone, earbuds, pen",
+    "HAIR DRYER": "Hair dryer + coiled cord", "STRAIGHTENER": "Straightener, lying flat",
+    "CURLER / ROUND BRUSH": "Curling iron or round brush", "HAIRBRUSH": "Paddle / hair brushes",
+    "COMBS": "Combs, wide-tooth comb", "MAKEUP BRUSHES": "Makeup brushes, sponges",
+    "HAIR SPRAY / OIL": "Hair spray, serum, oil", "SERUMS / TONER": "Serum, toner, face wash",
+    "CREAMS / JARS": "Moisturiser, cream jars", "PALETTES / COMPACTS": "Eye palettes, compacts, blush",
+    "FOUNDATION": "Foundation, primer, concealer", "LIPSTICK": "8–10 lipsticks standing",
+    "NAIL POLISH": "8–10 bottles standing", "KAJAL / LINER": "Kajal, eyeliner, brow pencil",
+    "MASCARA": "Mascara, lip liner", "EARRINGS": "Earrings, studs", "HAIR TIES / CLIPS": "Hair ties, clips, bands",
+    "BINDI / PINS": "Bindi, safety / hair pins", "PERFUME / DEO": "Perfume, deo, body mist",
+    "COTTON / BUDS": "Cotton pads, ear buds",
 }
 PAL = {
     "PERFUME": "#e9d5c3", "GROOMING": "#efe3d6", "BELT": "#d9e4d2", "BELT / TIE": "#d9e4d2",
     "WATCH": "#d4dfea", "WALLET": "#e8dcc0", "WALLET / CARDS": "#e8dcc0", "SUNGLASSES": "#e6d3dc",
     "DAILY DROP TRAY": "#dcdcdc", "PENS / KEYS": "#dcdcdc",
+    "HAIR DRYER": "#d4dfea", "STRAIGHTENER": "#dde6ef", "CURLER / ROUND BRUSH": "#dde6ef",
+    "HAIRBRUSH": "#d9e4d2", "COMBS": "#d9e4d2", "MAKEUP BRUSHES": "#e6d3dc", "HAIR SPRAY / OIL": "#d9e4d2",
+    "SERUMS / TONER": "#e9d5c3", "CREAMS / JARS": "#e9d5c3", "PALETTES / COMPACTS": "#e6d3dc",
+    "FOUNDATION": "#e6d3dc", "PERFUME / DEO": "#e9d5c3", "COTTON / BUDS": "#dcdcdc",
 }
 SMALL_COLOUR = "#f1e6c9"
 
@@ -159,10 +207,8 @@ def render(size, L):
         f"    difference in the {L['flex'][0]} and the {L['flex'][1]} — those are the only two flexible compartments.",
         "2. Dividers: 6 mm plywood / MDF with white laminate or edge-banding to match the drawer (or 4–5 mm acrylic). Height 65 mm — keep ≥ 25 mm clear under the drawer above.",
         "3. Joints: where two dividers cross, cut half-depth slots (egg-crate / halving joint) so the grid drops in as one removable unit. Cut each piece ~1 mm short for easy fit.",
-        "4. Lining: glue 2–3 mm velvet / suede sheet on the drawer base (like the sample photo) so watches, perfume and jewellery don't scratch or slide.",
-        '5. Watch cells: soft pillows, 3" long × 2" dia (foam rolled in the same fabric), lying front-to-back in each 3" × 4" cell.',
-        "6. Perfume: check tallest bottle vs. drawer inside height before finalising — tall bottles can lie on their side in the perfume bay.",
-    ]
+        "4. Lining: glue 2–3 mm velvet / suede sheet on the drawer base (like the sample photo) so nothing scratches or slides.",
+    ] + L["extra"]
     PH = int(NY + 30 + len(notes) * 23 + 40)
 
     a(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {PW} {PH}" width="{PW}" height="{PH}" '
@@ -170,7 +216,7 @@ def render(size, L):
     a('<defs><marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" '
       'orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#222"/></marker></defs>')
     a(f'<rect width="{PW}" height="{PH}" fill="#fff"/>')
-    text(110, 60, f"DRAWER ORGANIZER {fmt(W)} × {fmt(D)} — PARTITION LAYOUT (TOP VIEW)", 30, 700, fill="#111")
+    text(110, 60, f"{L.get('title', 'DRAWER ORGANIZER')} {fmt(W)} × {fmt(D)} — PARTITION LAYOUT (TOP VIEW)", 30, 700, fill="#111")
     text(110, 92, f"Inside drawer: {fmt(W)} W × {fmt(D)} D  ·  Dividers: 1/4\" (6 mm) thick × {HEIGHT_TXT} high  ·  "
          "All sizes are CLEAR inside sizes", 17, fill="#444")
 
@@ -183,9 +229,12 @@ def render(size, L):
         X, Y, Wp, Hp = OX + f(cx), OY + f(cy), f(cw), f(cd)
         a(f'<rect x="{X}" y="{Y}" width="{Wp}" height="{Hp}" fill="{PAL.get(label, SMALL_COLOUR)}"/>')
         fs = 14 if Wp >= 140 else 12 if Wp >= 110 else 11
-        name = label.split(" / ") if Wp < 150 and " / " in label else [label]
-        if len(name) == 2:
+        name = [label]
+        if Wp < 150 and " / " in label:
+            name = label.split(" / ")
             name[0] += " /"
+        elif len(label) * fs * 0.68 > Wp - 10 and " " in label:
+            name = label.split(" ", 1)
         lines = name + [f"{fmt(cw)} × {fmt(cd)}"]
         y0 = Y + Hp / 2 - (len(lines) - 1) * fs * 0.62
         for k, line in enumerate(lines):
@@ -238,6 +287,10 @@ def render(size, L):
         text(110, NY + 30 + k * 23, n, extra='xml:space="preserve"')
     a("</svg>")
 
+    with open(f"layout-{size}.json", "w") as fh:  # geometry for the 3D render
+        json.dump({"W": float(W), "D": float(D), "T": float(T), "H": 2.5,
+                   "cells": [[float(v) for v in c[:4]] + [c[4]] for c in cells],
+                   "pieces": [[float(v) for v in p[:4]] for p in pieces]}, fh)
     with open(f"drawer-{size}.svg", "w") as fh:
         fh.write("\n".join(out))
     print(f"drawer-{size}: {len(cells)} compartments, {sum(cut.values())} pieces, "
